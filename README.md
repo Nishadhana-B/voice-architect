@@ -1,75 +1,92 @@
 # Voice Architect
 
-Talk through a system design out loud. An AI architect on **Amazon Nova 2 Sonic** records it as you speak, draws the
-diagram live, flags Well-Architected style risks, estimates the monthly cost, asks one probing question at a time, and
-writes a design document when you are done.
+You describe a system design out loud. The program draws it, points out the risks, guesses what it would cost on AWS,
+and saves a design document with the diagram in it.
 
-![architecture](docs/architecture.svg)
+It runs on your laptop. The voice is Amazon Nova 2 Sonic on Bedrock, and the tool calls go through the Strands Agents
+SDK.
 
-## What you see while you talk
-A page on `http://127.0.0.1:8765` updates live: the diagram (risky components get red or amber borders and a badge
-count), the risk list (each marked "stated by you" or "not stated, to confirm"), the monthly cost, and the transcript.
+![The page while a design is being described](docs/screenshot.jpg)
+
+## Using it
+
+```bash
+./setup.sh     # first time only: audio library, Python 3.12+, packages, AWS CLI, a check
+./run.sh       # opens the page and starts listening
+```
+
+Use headphones if you can. If the architect seems to hear itself, run `./run.sh --headphones`.
+You need AWS access to Nova 2 Sonic in `us-east-1`. The access key is never stored in this repo.
+
+Talk one sentence at a time and wait for the answer. Something like:
+
+> Customers come through CloudFront to a load balancer. The load balancer sends traffic to two EC2 web servers, which
+> use a Postgres database. The database runs in one availability zone and has no backups.
+
+Things you can say after that: "what are the biggest risks", "what would this cost per month", "recap the design",
+"remove the S3 bucket", "start a new design", "export the design document".
+
+On the page you can rename the design, start a new one, or type a sentence if talking isn't convenient.
 
 ## What you get at the end
-Say "export the design document" (or use the download links at the top of the live page):
-- `exports/design-<time>/design.md`: the document, with the diagram embedded, the risks and the cost table
-- `exports/design-<time>/diagram.svg`: the architecture diagram (opens in any browser, imports into slides, Figma or Confluence)
-- `exports/design-<time>/report.html`: one self-contained page (diagram, risks, cost) that opens anywhere and prints to PDF
-- the live page also has **diagram PNG**, **design doc (MD)** and **report (HTML)** download links
+
+Saying "export the design document", or using the links at the top of the page, gives you:
+
+- `exports/design-<time>/design.md`, the document with the diagram, the risks and a cost table
+- `exports/design-<time>/diagram.svg`, the diagram on its own
+- `exports/design-<time>/report.html`, one page with all of it that you can print to PDF
+- a PNG of the diagram, from the page
 
 ## How it works
-- **Voice:** Amazon Nova 2 Sonic through a Strands Agents `BidiAgent`. Speech in, speech out, tool calls, barge-in.
-- **One tool call per spoken sentence.** `update_design` records everything you just said (components, flows, stated
-  facts, traffic) and returns the risks to state plus the single next question. Earlier versions used ten small tools and
-  the model talked between calls: it said "no new risks" before the risk tool had answered.
-- **The model reports, code decides.** Risks come from deterministic rules, the next question is chosen by code, and the
-  cost comes from a table. The model is told never to add a risk, a question or a number a tool did not return.
-- **Stated vs unknown.** A fact you did not state is `None`, not `False`. "Not stated" becomes a question; "stated" becomes
-  a risk.
 
-## Results (be honest)
-Scripted design reviews: macOS `say` plays the engineer to the real model, three runs or more per scenario, scored against
-ground truth (components found, risks found, risks actually spoken, thinking-aloud leaks, unanswered sentences).
+- Nova 2 Sonic listens and speaks. A Strands `BidiAgent` gives it a handful of tools.
+- Everything you say about the design goes into **one tool call** (`update_design`). I started with ten small tools,
+  but the model kept talking between calls and said "no new risks" before the risk check had come back.
+- The risks come from plain rules in Python (`architect/rules.py`), not from the model. The next question is picked by
+  code too (`architect/questions.py`), and so is the cost (`architect/costs.py`). The model is told not to add
+  anything the tools didn't return.
+- A fact you haven't mentioned is stored as unknown, not as false. Unknown turns into a question. Only something you
+  actually said, like "no backups", turns into a risk.
+- Common slips are fixed in code: "Aurora database" typed as plain RDS, "we use CloudWatch" recorded as a setting,
+  "Web Server 1" and "Web Server 2" as two boxes.
 
-| Scenario | Runs passed | Components found | Risks captured | Risks spoken | Strict leaks | Silent turns | Median reply delay |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| store | 4 of 4 | 100% | 100% | 100% | 0 of 28 turns | 0 | 2.25 s |
-| pipeline | 4 of 4 | 100% | 100% | 100% | 0 of 20 turns | 0 | 2.38 s |
-| clean | 4 of 4 | 100% | 100% | 100% | 0 of 16 turns | 0 | 2.22 s |
-| notify (held-out) | 4 of 4 | 100% | 100% | 100% | 0 of 16 turns | 0 | 2.36 s |
+## How well it works
 
+I tested with scripted reviews: macOS `say` plays the engineer to the real model, and each run is scored against what
+should have come out (components found, risks found, risks said out loud, any thinking aloud, any sentence left
+unanswered).
 
-- All numbers are synthetic voices on cooperative, scripted scenarios, not real people. **Not tested by a person yet.**
-- The first three scenarios (`store`, `pipeline`, `clean`) were used while fixing bugs, so they flatter the result.
-  `notify` was written afterwards and never tuned against: see the held-out row.
-- Leak definition: a **strict leak** is the model thinking aloud ("the user mentioned...", "I should check..."), talking
-  about its instructions, or a reply over 90 words. "I need to ask..." is counted as mild narration and reported, not
-  failed. The first detector was too broad (it flagged "Okay, the risk is..."); every saved round was re-scored with the
-  final definition (`python scripts/rescore_leaks.py`).
-- Cost: the price table is typed in from public AWS price pages, not fetched live (the Pricing API was not available to
-  the test user). Expect about +-25%. The tool says so out loud.
+RESULTS_TABLE
+
+Read these numbers with some care.
+
+- Every voice was synthetic and every scenario was cooperative. **No real person has tested it yet.**
+- I fixed bugs using `store`, `pipeline` and `clean`, so those rows look better than they should. `notify` was written
+  afterwards and never used for fixing, so it is the fairer row.
+- "Thinking aloud" means the model talks about "the user" or its instructions, says "I should check...", or goes over
+  90 words. My first detector was too broad and flagged normal answers, so I re-scored every saved round with the final
+  rule (`python scripts/rescore_leaks.py`).
+- Costs come from a price table I typed in from AWS's public pages. It isn't live, and the Pricing API wasn't open to the
+  key I tested with. Treat the total as roughly right, give or take a quarter.
 
 ## Known problems
-- A tool error can still be spoken ("I couldn't find Web server 2, did you mean...?").
-- Replies often start with "Okay,".
-- Fifteen rules and eighteen component types only: no multi-region, no networking detail, no Kubernetes.
-- The model sometimes needs a repeated sentence when it mishears a service name.
 
-## Run it
-```bash
-./setup.sh      # first time: portaudio, Python 3.12+, packages, AWS CLI, profile 'voice-chef', pre-flight check
-./run.sh        # opens the live page and starts listening (use --headphones if it hears itself)
-```
-Needs AWS access to Amazon Nova 2 Sonic in `us-east-1`. The key is never stored in this repo.
+- A tool error can still get spoken, for example "I couldn't find Web server 2".
+- It mishears service names now and then. The conversation panel shows what it heard.
+- It knows 19 component types and 17 rules. No multi-region designs, no Kubernetes, not much networking detail.
+- Only English has been tried.
+
+## Tests
 
 ```bash
-python -m pytest -q                                    # 51 tests, no AWS needed
-python scripts/headless.py store pipeline clean --runs 4 --out out    # scripted runs against the real model
-python scripts/headless.py store --live --hold 600      # same, with the live page up for screenshots
-python scripts/results_table.py out/*/summary.json
+python -m pytest -q                                                # no AWS needed
+python scripts/headless.py store pipeline --runs 4 --out out       # scripted runs against the real model
+python scripts/results_table.py out/*/summary.json                 # turn the results into a table
 ```
 
-## Layout
-`architect/model.py` design + aliases, `rules.py` checks, `questions.py` next question, `costs.py` estimate,
-`diagram.py` SVG, `doc.py` Markdown export, `tools.py` the tools the model sees, `agent.py` prompt and model,
-`live.py` web page, `audio_io.py` scripted caller and recorder, `scoring.py` + `scenarios.py` the measurement.
+## Where things are
+
+`architect/model.py` the design, `rules.py` the checks, `questions.py` the next question, `costs.py` the estimate,
+`diagram.py` the drawing, `doc.py` the exports, `tools.py` what the model can call, `agent.py` the prompt,
+`live.py` the page, `session.py` ties them together, `audio_io.py` and `scoring.py` and `scenarios.py` are the test
+harness.

@@ -10,7 +10,8 @@ from .model import TYPES, Design
 from .rules import analyze
 
 
-def to_markdown(d: Design, title: str = "Architecture design review", diagram_ref: str | None = None) -> str:
+def to_markdown(d: Design, title: str | None = None, diagram_ref: str | None = None) -> str:
+    title = title or d.title
     findings, cost = analyze(d), estimate(d)
     names = {c.id: c.name for c in d.components.values()}
     out = [f"# {title}", f"*Generated {dt.datetime.now().strftime('%Y-%m-%d %H:%M')} from a spoken design review.*", "",
@@ -44,7 +45,8 @@ def to_markdown(d: Design, title: str = "Architecture design review", diagram_re
 SEVERITY_COLOR = {"high": "#ef4444", "medium": "#f59e0b", "low": "#3b82f6"}
 
 
-def to_html(d: Design, title: str = "Architecture design review") -> str:
+def to_html(d: Design, title: str | None = None) -> str:
+    title = title or d.title
     """One self-contained page (inline SVG, no external files) that opens anywhere and prints to PDF."""
     findings, cost = analyze(d), estimate(d)
     risks = "".join(

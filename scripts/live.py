@@ -37,6 +37,7 @@ async def main(headphones: bool) -> None:
     except Exception:  # noqa: BLE001 - opening a browser is a convenience only
         pass
     agent = build_agent(s.design)
+    s.attach(agent, asyncio.get_running_loop())
     audio = AudioIO(audio_processor=not headphones)
     print("Echo cancellation:", "off (headphones mode)" if headphones else "on (speakers OK)")
     print(TRY)

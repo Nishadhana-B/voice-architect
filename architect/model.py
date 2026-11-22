@@ -170,7 +170,23 @@ class Design:
         self.traffic: dict = {"avg_rps": None, "monthly_active_users": None, "data_gb_month": None}
         self.reported: set[str] = set()  # finding ids the agent has already told the engineer about
         self.asked: set[str] = set()     # probing questions already asked
+        self.title = "Untitled design"
         self.version = 0
+
+    def reset(self) -> None:
+        """Start over. Clears in place because the tools are bound to this very object."""
+        self.components.clear()
+        self.connections.clear()
+        self.traffic.update({"avg_rps": None, "monthly_active_users": None, "data_gb_month": None})
+        self.reported.clear()
+        self.asked.clear()
+        self.title = "Untitled design"
+        self._touch()
+
+    def set_title(self, title: str) -> str:
+        self.title = " ".join((title or "").split())[:80] or "Untitled design"
+        self._touch()
+        return self.title
 
     # --- helpers -------------------------------------------------------------------------------
     @staticmethod

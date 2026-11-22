@@ -155,8 +155,8 @@ def test_diagram_shows_components_edges_and_risk_badges():
     d = store()
     svg = render_svg(d, analyze(d))
     assert svg.startswith("<svg") and "Orders database" in svg and "marker-end" in svg
-    assert "#ef4444" in svg  # a high-severity badge colour is present
-    assert "Start talking" in render_svg(Design())
+    assert "#d6342c" in svg  # a high-severity badge colour is present
+    assert "Nothing here yet" in render_svg(Design())
     assert "flowchart LR" in render_mermaid(d)
 
 
@@ -178,3 +178,20 @@ def test_live_view_serves_state_and_svg():
     assert b"Voice Architect" in urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5).read()
     s.live.stop()
     assert url.startswith("http://127.0.0.1")
+
+
+def test_long_chains_flow_top_to_bottom_and_short_ones_left_to_right():
+    short = store()
+    import re as _re
+    w, h = (int(v) for v in _re.search(r'viewBox="0 0 (\d+) (\d+)"', render_svg(short)).groups())
+    assert w > h                                                     # five layers: a horizontal strip
+    long = Design()
+    prev = None
+    for i in range(8):
+        long.add_component("lambda", f"Step {i}")
+        if prev:
+            long.connect(prev, f"Step {i}")
+        prev = f"Step {i}"
+    svg = render_svg(long, analyze(long))
+    w, h = (int(v) for v in _re.search(r'viewBox="0 0 (\d+) (\d+)"', svg).groups())
+    assert h > w and svg.count("marker-end") == 7 and "Step 7" in svg    # eight layers: stacked top to bottom

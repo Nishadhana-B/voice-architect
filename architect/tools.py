@@ -117,8 +117,8 @@ def _review(design: Design, only_new: bool) -> dict:
             "to_confirm": [f.message for f in assumed[:3]] if not only_new else [],
             "next_question": q["question"] if q else None,
             "instruction_for_assistant": (
-                "Give ONE spoken reply for everything the engineer just said. Start with a few words of "
-                "confirmation. Then state every risk in risks_to_state (at most three), each in one short "
+                "Give ONE spoken reply for everything the engineer just said. Acknowledge it in a few natural words "
+                "(not \"Okay\"). Then state every risk in risks_to_state (at most three), each in one short "
                 "spoken sentence using the message and fix as given. If there are none, say there are no new risks. "
                 "If asked for all risks, also mention to_confirm items as things to check. THEN ask exactly the "
                 "next_question in its words, if there is one. Never add a risk or a question of your own. "
@@ -227,6 +227,14 @@ def make_tools(design: Design) -> list:
         return _review(design, only_new)
 
     @tool
+    def new_design() -> dict:
+        """Clear everything and start a fresh design. Use only when the engineer asks to start over or start a new
+        design."""
+        design.reset()
+        return {"cleared": True,
+                "instruction_for_assistant": "Say one short sentence: fresh start, what are we building?"}
+
+    @tool
     def estimate_cost() -> dict:
         """Estimate the monthly AWS cost of the current design. Call when the engineer asks about cost or price."""
         c = estimate(design)
@@ -257,14 +265,14 @@ def make_tools(design: Design) -> list:
                                               "diagram and a report. Give only the folder name.")}
 
     return [add_component, set_property, connect, disconnect, remove_component, set_traffic, update_design,
-            review_risks, estimate_cost, show_design, export_design_doc]
+            review_risks, new_design, estimate_cost, show_design, export_design_doc]
 
 
 SUPPORTED_TYPES = sorted(TYPES)
 
 
-AGENT_TOOLS = ("update_design", "review_risks", "remove_component", "disconnect", "estimate_cost", "show_design",
-               "export_design_doc")
+AGENT_TOOLS = ("update_design", "review_risks", "remove_component", "disconnect", "new_design", "estimate_cost",
+               "show_design", "export_design_doc")
 
 
 def agent_tools(design: Design) -> list:

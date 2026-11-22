@@ -69,4 +69,30 @@ SCENARIOS: dict[str, Scenario] = {
         {"apigw": 1, "lambda": 2, "sns": 1, "dynamodb": 1, "cache": 1},
         {"lambda-async-no-dlq", "storage-unencrypted", "cache-single-node"},
         allow_types={"users", "cognito"}, notes="held-out scenario, not used while tuning"),
+    # Showcase for screenshots: a large, deliberately flawed design. Not used for the quality numbers.
+    "marketplace": Scenario(
+        "marketplace",
+        [Say("Hi. I am designing an online marketplace. Customers come through CloudFront with a web application "
+             "firewall to an Application Load Balancer."),
+         Say("The load balancer sends traffic to an ECS Fargate web service with four tasks and auto scaling."),
+         Say("The web service calls an API Gateway that has no authentication, and the gateway invokes an orders "
+             "Lambda function."),
+         Say("The orders Lambda writes to a Postgres database. It runs in a single availability zone and there are "
+             "no backups. The orders Lambda also publishes order events to an SNS topic."),
+         Say("A payments Lambda function and an email Lambda function both subscribe to the topic. Neither has a "
+             "failure destination."),
+         Say("The payments Lambda writes to a DynamoDB table that has point in time recovery disabled."),
+         Say("Order events also go to an SQS queue with no dead letter queue, and a fulfilment Lambda function "
+             "consumes that queue."),
+         Say("Product images are in a public S3 bucket, served through CloudFront."),
+         Say("We keep sessions in a Redis cache with a single node. The web service uses it."),
+         Say("A NAT gateway lets the services reach the internet. We expect about one hundred requests per second."),
+         Say("What are the biggest risks?"),
+         Say("What does this cost per month?"),
+         Say("Please export the design document.")],
+        {"cdn": 1, "alb": 1, "ecs": 1, "apigw": 1, "lambda": 4, "rds": 1, "sns": 1, "dynamodb": 1, "sqs": 1,
+         "s3": 1, "cache": 1, "nat": 1},
+        {"db-single-az", "db-no-backups", "api-no-auth", "s3-public", "dynamodb-no-pitr", "queue-no-dlq",
+         "cache-single-node"},
+        allow_types={"users", "waf"}, expect_cost_question=True, notes="large showcase design for screenshots"),
 }

@@ -19,7 +19,7 @@ def test_errors_carry_an_instruction_instead_of_raising():
 
 def test_all_tools_exposed_with_unique_names():
     names = [x.tool_name for x in make_tools(Design())]
-    assert len(names) == len(set(names)) == 11
+    assert len(names) == len(set(names)) == 12
     assert {"add_component", "connect", "review_risks", "estimate_cost", "export_design_doc"} <= set(names)
 
 
@@ -423,7 +423,7 @@ def test_live_page_serves_the_downloads():
     s.design.add_component("rds", "DB", "multi_az=false")
     get = lambda p: _url.urlopen(f"http://127.0.0.1:{port}{p}", timeout=5).read().decode()  # noqa: E731
     assert get("/design.svg").startswith("<svg") and "![Architecture diagram](architecture.svg)" in get("/design.md")
-    assert "<svg" in get("/report.html") and "diagram PNG" in get("/") and "downloadPng" in get("/")
+    assert "<svg" in get("/report.html") and "Diagram (PNG)" in get("/") and "downloadPng" in get("/")
     s.live.stop()
 
 
@@ -431,3 +431,93 @@ def test_html_report_forces_a_light_page_and_fits_the_diagram_to_the_width():
     html = to_html(_risky_design())
     assert "color-scheme:light" in html and "background:#fff" in html      # readable even in a dark-mode browser
     assert ".d svg{max-width:100%;height:auto" in html                      # a wide diagram scales instead of overflowing
+
+
+# --- new design, title, type instead of speaking ------------------------------------------------------------
+import asyncio as _asyncio  # noqa: E402
+import threading as _threading  # noqa: E402
+import urllib.error as _uerr  # noqa: E402
+
+
+def _post(port, path, body=None):
+    req = _url.Request(f"http://127.0.0.1:{port}{path}", data=_json.dumps(body or {}).encode(), method="POST",
+                       headers={"Content-Type": "application/json"})
+    try:
+        return _json.loads(_url.urlopen(req, timeout=5).read())
+    except _uerr.HTTPError as e:
+        return _json.loads(e.read())
+
+
+class _FakeAgent:
+    def __init__(self):
+        self.sent = []
+
+    async def send(self, text):
+        self.sent.append(text)
+
+
+def _running_loop():
+    loop = _asyncio.new_event_loop()
+    _threading.Thread(target=loop.run_forever, daemon=True).start()
+    return loop
+
+
+def test_reset_clears_everything_in_place_so_the_tools_keep_working():
+    d = _risky_design()
+    d.set_title("Orders platform")
+    tools = tool_map(d)
+    d.reset()
+    assert not d.components and not d.connections and d.title == "Untitled design" and not d.reported and not d.asked
+    tools["update_design"](components="s3 | Images")            # the same tool objects still work after a reset
+    assert [c.name for c in d.components.values()] == ["Images"]
+
+
+def test_title_is_cleaned_and_used_in_the_exports():
+    d = Design()
+    assert d.set_title("  Orders    platform \n v2 ") == "Orders platform v2"
+    assert d.set_title("   ") == "Untitled design"
+    d.set_title("Orders platform")
+    assert "# Orders platform" in to_markdown(d) and "<title>Orders platform</title>" in to_html(d)
+
+
+def test_spoken_new_design_clears_the_design_and_asks_what_we_are_building():
+    d = _risky_design()
+    out = tool_map(d)["new_design"]()
+    assert not d.components and out["cleared"] and "what are we building" in out["instruction_for_assistant"]
+
+
+def test_page_buttons_start_over_rename_and_forward_typed_text():
+    s = Session(port=0)
+    s.live.port = 0
+    s.live.start()
+    port = s.live._server.server_address[1]
+    assert _post(port, "/api/say", {"text": "hello"})["ok"] is False                   # no agent attached yet
+    agent, loop = _FakeAgent(), _running_loop()
+    s.attach(agent, loop)
+    tool_map(s.design)["update_design"](components="rds | DB")
+    s.recorder.transcripts.append({"role": "user", "text": "hi"})
+    assert _post(port, "/api/title", {"title": "Orders  platform"}) == {"ok": True, "title": "Orders platform"}
+    assert _post(port, "/api/say", {"text": "  add   a queue  "})["ok"] is True
+    assert _post(port, "/api/say", {"text": "   "})["ok"] is False
+    assert _post(port, "/api/new")["ok"] is True
+    import time as _t
+    _t.sleep(0.3)
+    assert not s.design.components and s.design.title == "Untitled design" and s.recorder.transcripts == []
+    assert agent.sent[0] == "add a queue" and "new design" in agent.sent[1].lower()
+    state = _json.loads(_url.urlopen(f"http://127.0.0.1:{port}/state.json", timeout=5).read())
+    assert state["components"] == 0 and state["title"] == "Untitled design"
+    s.live.stop()
+    loop.call_soon_threadsafe(loop.stop)
+
+
+def test_page_has_the_controls_a_person_expects():
+    s = Session(port=0)
+    s.live.port = 0
+    s.live.start()
+    port = s.live._server.server_address[1]
+    page = _url.urlopen(f"http://127.0.0.1:{port}/", timeout=5).read().decode()
+    for needle in ("New design", "Untitled design", "type a sentence instead of speaking", "Clear this design?",
+                   "Diagram (SVG)", "Document (Markdown)", "Report (HTML)"):
+        assert needle in page, needle
+    assert "canvas.svg" in page and "radial-gradient" in page                       # light dotted canvas, not a dark panel
+    s.live.stop()
