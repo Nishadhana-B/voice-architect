@@ -12,7 +12,8 @@ from pathlib import Path
 from strands import tool
 
 from .costs import estimate
-from .doc import to_markdown
+from .diagram import render_svg
+from .doc import to_html, to_markdown
 from .model import TYPES, Design, parse_details, resolve_type
 from .questions import next_question as pick_question
 from .rules import analyze
@@ -243,12 +244,17 @@ def make_tools(design: Design) -> list:
 
     @tool
     def export_design_doc() -> dict:
-        """Write the design, risks and cost to a Markdown design document. Use when the engineer wraps up."""
-        EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-        path = EXPORT_DIR / f"design-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.md"
-        path.write_text(to_markdown(design))
-        return {"file": str(path), "components": len(design.components),
-                "instruction_for_assistant": "Tell the engineer the document is saved and give only the file name."}
+        """Save the design as a folder with a Markdown document, the architecture diagram (SVG) and a single-page HTML
+        report. Use when the engineer wraps up."""
+        folder = EXPORT_DIR / f"design-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "diagram.svg").write_text(render_svg(design, analyze(design)))
+        (folder / "design.md").write_text(to_markdown(design, diagram_ref="diagram.svg"))
+        (folder / "report.html").write_text(to_html(design))
+        return {"folder": str(folder), "file": str(folder / "design.md"),
+                "files": ["design.md", "diagram.svg", "report.html"], "components": len(design.components),
+                "instruction_for_assistant": ("Tell the engineer the design is saved in one folder with the document, the "
+                                              "diagram and a report. Give only the folder name.")}
 
     return [add_component, set_property, connect, disconnect, remove_component, set_traffic, update_design,
             review_risks, estimate_cost, show_design, export_design_doc]

@@ -10,6 +10,13 @@ writes a design document when you are done.
 A page on `http://127.0.0.1:8765` updates live: the diagram (risky components get red or amber borders and a badge
 count), the risk list (each marked "stated by you" or "not stated, to confirm"), the monthly cost, and the transcript.
 
+## What you get at the end
+Say "export the design document" (or use the download links at the top of the live page):
+- `exports/design-<time>/design.md`: the document, with the diagram embedded, the risks and the cost table
+- `exports/design-<time>/diagram.svg`: the architecture diagram (opens in any browser, imports into slides, Figma or Confluence)
+- `exports/design-<time>/report.html`: one self-contained page (diagram, risks, cost) that opens anywhere and prints to PDF
+- the live page also has **diagram PNG**, **design doc (MD)** and **report (HTML)** download links
+
 ## How it works
 - **Voice:** Amazon Nova 2 Sonic through a Strands Agents `BidiAgent`. Speech in, speech out, tool calls, barge-in.
 - **One tool call per spoken sentence.** `update_design` records everything you just said (components, flows, stated

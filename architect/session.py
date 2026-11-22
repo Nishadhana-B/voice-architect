@@ -4,6 +4,7 @@ from __future__ import annotations
 from .audio_io import Recorder
 from .costs import estimate
 from .diagram import render_svg
+from .doc import to_html, to_markdown
 from .live import LiveView
 from .model import Design
 from .rules import analyze
@@ -13,7 +14,9 @@ class Session:
     def __init__(self, port: int = 8765):
         self.design = Design()
         self.recorder = Recorder()
-        self.live = LiveView(self.state, self.svg, port)
+        self.live = LiveView(self.state, self.svg, port,
+                             get_md=lambda: to_markdown(self.design, diagram_ref="architecture.svg"),
+                             get_html=lambda: to_html(self.design))
 
     def svg(self) -> str:
         return render_svg(self.design, analyze(self.design))

@@ -374,3 +374,60 @@ def test_collapsed_servers_still_get_the_right_risk_and_cost():
     assert "single-instance" not in {f.rule for f in __import__("architect.rules", fromlist=["analyze"]).analyze(d)}
     from architect.costs import estimate
     assert estimate(d)["breakdown"][0]["note"].startswith("2 x")
+
+
+# --- the export must include the diagram, not just a Markdown file ------------------------------------------
+import json as _json  # noqa: E402
+import urllib.request as _url  # noqa: E402
+
+from architect.doc import to_html, to_markdown  # noqa: E402
+from architect.session import Session  # noqa: E402
+
+
+def _risky_design():
+    d = Design()
+    tool_map(d)["update_design"](components="cdn | CloudFront; rds | Orders database | multi_az=false, backups=false",
+                                 connections="CloudFront -> Orders database")
+    return d
+
+
+def test_markdown_embeds_the_diagram_image_when_a_reference_is_given():
+    d = _risky_design()
+    assert "![Architecture diagram](diagram.svg)" in to_markdown(d, diagram_ref="diagram.svg")
+    assert "![Architecture diagram]" not in to_markdown(d)                    # backwards compatible
+
+
+def test_html_report_is_self_contained_with_diagram_risks_and_cost():
+    html = to_html(_risky_design())
+    assert html.count("<svg") == 1 and "Orders database" in html and "HIGH" in html and "per month" in html
+    external = html.replace("http://www.w3.org/2000/svg", "")        # the SVG namespace is a name, not a download
+    assert "http://" not in external and "https://" not in external and "src=" not in external   # nothing external to load
+
+
+def test_export_writes_document_diagram_and_report_into_one_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools_module, "EXPORT_DIR", tmp_path)
+    out = tool_map(_risky_design())["export_design_doc"]()
+    from pathlib import Path
+    folder = Path(out["folder"])
+    assert sorted(p.name for p in folder.iterdir()) == ["design.md", "diagram.svg", "report.html"]
+    assert (folder / "diagram.svg").read_text().startswith("<svg")
+    assert "![Architecture diagram](diagram.svg)" in (folder / "design.md").read_text()
+    assert "diagram" in out["instruction_for_assistant"] and out["file"].endswith("design.md")
+
+
+def test_live_page_serves_the_downloads():
+    s = Session(port=0)
+    s.live.port = 0
+    s.live.start()
+    port = s.live._server.server_address[1]
+    s.design.add_component("rds", "DB", "multi_az=false")
+    get = lambda p: _url.urlopen(f"http://127.0.0.1:{port}{p}", timeout=5).read().decode()  # noqa: E731
+    assert get("/design.svg").startswith("<svg") and "![Architecture diagram](architecture.svg)" in get("/design.md")
+    assert "<svg" in get("/report.html") and "diagram PNG" in get("/") and "downloadPng" in get("/")
+    s.live.stop()
+
+
+def test_html_report_forces_a_light_page_and_fits_the_diagram_to_the_width():
+    html = to_html(_risky_design())
+    assert "color-scheme:light" in html and "background:#fff" in html      # readable even in a dark-mode browser
+    assert ".d svg{max-width:100%;height:auto" in html                      # a wide diagram scales instead of overflowing

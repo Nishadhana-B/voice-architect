@@ -21,9 +21,13 @@ main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(320px,1fr);gap:14
 .high{border-color:#ef4444}.medium{border-color:#f59e0b}.low{border-color:#3b82f6}
 .tag{font-size:11px;color:#94a3b8}.fix{color:#86efac;font-size:13px}
 .cost{font-size:30px;font-weight:700}.row{display:flex;justify-content:space-between;color:#cbd5e1;font-size:13px;padding:2px 0}
+.dl{margin-left:auto;font-size:13px;color:#94a3b8}.dl a{color:#7dd3fc;margin-left:10px;text-decoration:none}.dl a:hover{text-decoration:underline}
 .me{color:#7dd3fc}.ai{color:#fdba74}.line{margin:4px 0}#tr{max-height:240px;overflow:auto}
 </style>
-<header><h1><span class=dot></span>Voice Architect</h1><span class=sub id=meta>waiting for the conversation</span></header>
+<header><h1><span class=dot></span>Voice Architect</h1><span class=sub id=meta>waiting for the conversation</span>
+<span class=dl><b>Download:</b> <a href="/design.svg" download="architecture.svg">diagram SVG</a>
+<a href="#" id=png onclick="downloadPng();return false">diagram PNG</a>
+<a href="/design.md" download="design.md">design doc (MD)</a> <a href="/report.html" download="report.html">report (HTML)</a></span></header>
 <main><section>
 <div class=card id=diagram><h2>Architecture</h2><img id=svg alt="diagram"></div>
 <div class=card><h2>Conversation</h2><div id=tr></div></div></section>
@@ -42,13 +46,19 @@ document.getElementById('basis').textContent='Approximate: '+s.cost.price_basis;
 const tr=document.getElementById('tr'),stick=tr.scrollTop+tr.clientHeight>=tr.scrollHeight-8;
 tr.innerHTML=s.transcript.map(t=>`<div class=line><span class="${t.role==='user'?'me':'ai'}">${t.role==='user'?'You':'Architect'}:</span> ${E(t.text)}</div>`).join('');
 if(stick)tr.scrollTop=tr.scrollHeight;}catch(e){}}
+async function diagramPng(){const t=await (await fetch('/design.svg?'+Date.now())).text();
+return new Promise((ok,no)=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas'),k=2;c.width=img.width*k;c.height=img.height*k;
+const x=c.getContext('2d');x.scale(k,k);x.drawImage(img,0,0);ok(c.toDataURL('image/png'))};img.onerror=no;
+img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(t)})}
+async function downloadPng(){const a=document.createElement('a');a.href=await diagramPng();a.download='architecture.png';a.click()}
 setInterval(tick,700);tick();
 </script>"""
 
 
 class LiveView:
-    def __init__(self, get_state, get_svg, port: int = 8765):
+    def __init__(self, get_state, get_svg, port: int = 8765, get_md=None, get_html=None):
         self.get_state, self.get_svg, self.port = get_state, get_svg, port
+        self.get_md, self.get_html = get_md, get_html
         self._server = None
 
     def start(self) -> str:
@@ -74,6 +84,10 @@ class LiveView:
                         self._send(json.dumps(outer.get_state()).encode(), "application/json")
                     elif path == "/design.svg":
                         self._send(outer.get_svg().encode(), "image/svg+xml")
+                    elif path == "/design.md" and outer.get_md:
+                        self._send(outer.get_md().encode(), "text/markdown; charset=utf-8")
+                    elif path == "/report.html" and outer.get_html:
+                        self._send(outer.get_html().encode(), "text/html; charset=utf-8")
                     else:
                         self._send(b"not found", "text/plain", 404)
                 except Exception as e:  # noqa: BLE001 - the page must never crash the voice session
