@@ -56,7 +56,14 @@ I tested with scripted reviews: macOS `say` plays the engineer to the real model
 should have come out (components found, risks found, risks said out loud, any thinking aloud, any sentence left
 unanswered).
 
-RESULTS_TABLE
+| Scenario | Runs passed | Components found | Risks captured | Risks spoken | Strict leaks | Silent turns | Median reply delay |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| store | 3 of 3 | 100% | 100% | 100% | 0 of 21 turns | 0 | 2.37 s |
+| pipeline | 3 of 3 | 100% | 100% | 100% | 0 of 15 turns | 0 | 2.57 s |
+| clean | 3 of 3 | 100% | 100% | 100% | 0 of 12 turns | 0 | 2.46 s |
+| notify (held-out) | 3 of 3 | 100% | 100% | 100% | 0 of 12 turns | 0 | 2.46 s |
+
+This round ran each scenario 3 times, after the page and prompt were redesigned. Replies starting with "Okay": 49 of 64 before the prompt change, 0 of 60 after.
 
 Read these numbers with some care.
 
